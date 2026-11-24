@@ -60,6 +60,9 @@ type migrateApplyFlags struct {
 	txMode          string // (none, file, all)
 	execOrder       string // (linear, linear-skip, non-linear)
 	context         string // Run context. See cloudapi.DeployContextInput.
+	identityMode    string
+	identityImport  string
+	identityRemap   []string
 }
 
 func (f *migrateApplyFlags) migrateOptions() ([]migrate.ExecutorOption, error) {
@@ -155,6 +158,9 @@ If run with the "--dry-run" flag, atlas will not execute any SQL.`,
 	cmd.Flags().StringVar(&flags.context, flagContext, "", "describes what triggered this command (e.g., GitHub Action)")
 	cobra.CheckErr(cmd.Flags().MarkHidden(flagContext))
 	cmd.Flags().BoolVarP(&flags.allowDirty, flagAllowDirty, "", false, "allow start working on a non-clean database")
+	cmd.Flags().StringVar(&flags.identityMode, "identity-mode", "", "prototype migration plans [test, production]")
+	cmd.Flags().StringVar(&flags.identityImport, "identity-import-from", "", "prototype import from a trusted legacy migration directory")
+	cmd.Flags().StringSliceVar(&flags.identityRemap, "identity-remap", nil, "prototype approved old=new version mappings")
 	cmd.MarkFlagsMutuallyExclusive(flagLog, flagFormat)
 	return cmd
 }
@@ -1754,6 +1760,9 @@ func migrateApplyRun(cmd *cobra.Command, args []string, flags migrateApplyFlags,
 	defer client.Close()
 	// Prevent usage printing after input validation.
 	cmd.SilenceUsage = true
+	if flags.identityMode != "" || flags.identityImport != "" || len(flags.identityRemap) > 0 {
+		return migrateIdentityPrototype(cmd, client, dir, flags, count)
+	}
 	// Acquire a lock.
 	unlock, err := client.Driver.Lock(ctx, applyLockValue, flags.lockTimeout)
 	if err != nil {
