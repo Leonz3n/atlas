@@ -277,6 +277,16 @@ func (r *EntRevisions) Migrate(ctx context.Context) (err error) {
 				case *schema.ModifyTable:
 					r.maySetSchemaQualifier(cs.T)
 					if cs.T.Name == revision.Table {
+						if r.Dialect() == dialect.MySQL {
+							for _, change := range cs.Changes {
+								if drop, ok := change.(*schema.DropColumn); ok {
+									switch drop.C.Name {
+									case "migration_id", "content_hash", "identity_history":
+										return nil, errors.New("identity history requires an identity-mode apply")
+									}
+								}
+							}
+						}
 						return schema.Changes{cs}, nil
 					}
 				}
